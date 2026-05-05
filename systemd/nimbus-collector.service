@@ -1,0 +1,26 @@
+[Unit]
+Description=Nimbus Wi-Fi and BLE collector
+After=network.target
+Documentation=https://github.com/VarunKausika/nimbus
+
+[Service]
+Type=simple
+User=nimbus
+Group=nimbus
+ExecStart=/usr/local/bin/nimbus-collector
+Restart=on-failure
+RestartSec=5s
+
+# Grant raw socket access without full root
+AmbientCapabilities=CAP_NET_RAW CAP_NET_ADMIN
+CapabilityBoundingSet=CAP_NET_RAW CAP_NET_ADMIN
+
+# Harden the service
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%h/.nimbus
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

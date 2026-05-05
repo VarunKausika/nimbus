@@ -1,0 +1,19 @@
+[Unit]
+Description=Ollama local inference server
+After=network.target
+Documentation=https://ollama.com
+
+[Service]
+Type=simple
+User=ollama
+Group=ollama
+ExecStart=/usr/local/bin/ollama serve
+Restart=on-failure
+RestartSec=5s
+Environment=OLLAMA_HOST=127.0.0.1:11434
+
+# Keep inference strictly local
+Environment=OLLAMA_ORIGINS=http://127.0.0.1
+
+[Install]
+WantedBy=multi-user.target
