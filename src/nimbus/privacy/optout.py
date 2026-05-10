@@ -1,3 +1,4 @@
+import tomllib
 from pathlib import Path
 
 CONFIG_PATH = Path.home() / ".nimbus" / "config.toml"
@@ -5,7 +6,11 @@ CONFIG_PATH = Path.home() / ".nimbus" / "config.toml"
 
 def load_opt_out_prefixes(config_path: Path = CONFIG_PATH) -> list[str]:
     """Return the list of MAC prefixes/addresses to silently ignore."""
-    raise NotImplementedError
+    if not config_path.exists():
+        return []
+    with config_path.open("rb") as f:
+        raw = tomllib.load(f)
+    return [str(p) for p in raw.get("privacy", {}).get("opt_out", [])]
 
 
 def is_opted_out(mac: str, prefixes: list[str]) -> bool:
