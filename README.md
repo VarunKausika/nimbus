@@ -79,6 +79,23 @@ nimbus setup --skip-oui         # Ollama + systemd only
 
 **3. Put your Wi-Fi adapter into monitor mode**
 
+> **SSH users:** bringing `wlan0` down will disconnect your SSH session if you're connected over Wi-Fi. Use one of the approaches below to avoid this.
+
+**Option A — SSH over Ethernet (recommended):** plug an ethernet cable into the Pi and SSH via `eth0`. Then `wlan0` is free to switch modes without dropping your session.
+
+**Option B — USB Wi-Fi dongle for monitoring:** keep `wlan0` in managed mode for SSH and use a second monitor-mode-capable USB adapter for sensing. Update `~/.nimbus/config.toml` to point at the new interface (e.g. `wlan1mon`).
+
+**Option C — Virtual monitor interface (driver-dependent):** some drivers allow adding a virtual monitor interface without taking the parent down:
+
+```bash
+sudo iw dev wlan0 interface add wlan0mon type monitor
+sudo ip link set wlan0mon up
+```
+
+This leaves `wlan0` connected. It works on the Pi's built-in `brcmfmac` chip on some kernel versions but is not universally reliable — try it, but fall back to Option A or B if it doesn't hold.
+
+If you went with Option A or B and are switching `wlan0` directly:
+
 ```bash
 sudo ip link set wlan0 down
 sudo iw dev wlan0 set type monitor
