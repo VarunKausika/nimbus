@@ -324,31 +324,52 @@ def diff_presence(conn: sqlite3.Connection, since: str) -> PresenceDiff:
     since_ts = _parse_since(since)
     now = int(time.time())
 
-    # Who was present just before the checkpoint?
-    before_rows = queries.get_present_devices(
-        conn,
-        since_ts=since_ts - _PRESENCE_WINDOW_S,
-        min_observations=1,
-    )
-    # Filter to only those last seen before the checkpoint
-    before_rows = [r for r in before_rows if r["last_seen"] <= since_ts]
-    before_hashes = {r["mac_hash"] for r in before_rows}
+    def _hashes_in_range(from_ts: int, to_ts: int) -> set[str]:
+        cur = conn.execute(
+            "SELECT DISTINCT mac_hash FROM observations WHERE ts >= ? AND ts <= ?",
+            (from_ts, to_ts),
+        )
+        return {row[0] for row in cur.fetchall()}
 
-    # Who has been seen since the checkpoint?
-    after_rows = queries.get_present_devices(conn, since_ts=since_ts, min_observations=1)
-    after_hashes = {r["mac_hash"] for r in after_rows}
+    def _entries_for_hashes(hashes: set[str]) -> list[DeviceEntry]:
+        if not hashes:
+            return []
+        placeholders = ",".join("?" * len(hashes))
+        cur = conn.execute(
+            f"""
+            SELECT d.mac_hash, d.vendor_oui, d.inferred_class,
+                   d.first_seen, d.last_seen, l.name AS label
+            FROM devices d
+            LEFT JOIN labels l ON l.mac_hash = d.mac_hash
+            WHERE d.mac_hash IN ({placeholders})
+            """,
+            list(hashes),
+        )
+        cols = [c[0] for c in cur.description]
+        return [
+            DeviceEntry(
+                mac_hash=r["mac_hash"],
+                vendor=r.get("vendor_oui"),
+                device_class=r.get("inferred_class") or "unknown",
+                rssi_min=None,
+                rssi_max=None,
+                rssi_avg=None,
+                first_seen=_ts_to_iso(r.get("first_seen")),
+                last_seen=_ts_to_iso(r.get("last_seen")),
+                label=r.get("label"),
+            )
+            for r in [dict(zip(cols, row)) for row in cur.fetchall()]
+        ]
 
-    after_by_hash = {r["mac_hash"]: r for r in after_rows}
-    before_by_hash = {r["mac_hash"]: r for r in before_rows}
-
-    new_hashes = after_hashes - before_hashes
-    departed_hashes = before_hashes - after_hashes
-    lingering_hashes = before_hashes & after_hashes
+    # Use closed time ranges so a device seen in both windows is correctly
+    # classified as lingering rather than excluded by a last_seen filter.
+    before_hashes = _hashes_in_range(since_ts - _PRESENCE_WINDOW_S, since_ts)
+    after_hashes = _hashes_in_range(since_ts, now)
 
     return PresenceDiff(
-        new=[_row_to_device_entry(after_by_hash[h]) for h in new_hashes],
-        departed=[_row_to_device_entry(before_by_hash[h]) for h in departed_hashes],
-        lingering=[_row_to_device_entry(after_by_hash[h]) for h in lingering_hashes],
+        new=_entries_for_hashes(after_hashes - before_hashes),
+        departed=_entries_for_hashes(before_hashes - after_hashes),
+        lingering=_entries_for_hashes(before_hashes & after_hashes),
         since=_ts_to_iso(since_ts),
     )
 

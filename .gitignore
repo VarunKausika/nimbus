@@ -2,3 +2,4 @@ nimbus-scope.md
 uv.lock
 .venv/
 .claude/
+**/__pycache__/
